@@ -239,7 +239,7 @@ const aiController = {
       }
 
       // Get the generative model
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
       // Prepare conversation context
       let conversationContext = '';
@@ -375,7 +375,7 @@ const aiController = {
   healthCheck: async (req, res) => {
     try {
       // Test the AI service with a simple query
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
       const result = await model.generateContent("Hello");
       const response = await result.response;
       

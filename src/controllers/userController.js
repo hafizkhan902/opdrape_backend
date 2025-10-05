@@ -5,6 +5,19 @@ const jwt = require('jsonwebtoken');
 const Product = require('../models/Product');
 const generateToken = require('../utils/token');
 
+// Helper: normalize all cart item quantities to valid numbers >= 1
+function normalizeCartQuantities(userDoc) {
+  if (!userDoc || !Array.isArray(userDoc.cart)) return;
+  userDoc.cart.forEach(item => {
+    const coerced = Number(item.quantity);
+    if (!Number.isFinite(coerced) || coerced < 1) {
+      item.quantity = 1;
+    } else {
+      item.quantity = Math.floor(coerced);
+    }
+  });
+}
+
 const userController = {
   // Register new user
   async register(req, res) {
@@ -158,18 +171,24 @@ const userController = {
   // Add to cart
   async addToCart(req, res) {
     try {
-      const { productId, quantity } = req.body;
+      const { productId } = req.body;
+      // quantity can come either as top-level or inside size.quantity
+      const quantityRaw = req.body.quantity !== undefined ? req.body.quantity : (req.body.size && req.body.size.quantity);
+      let quantity = Number(quantityRaw);
+      if (!Number.isFinite(quantity) || quantity < 1) {
+        quantity = 1;
+      }
+
       const user = req.user;
       
-      // Validate product exists and has colorVariants
+      if (!productId) {
+        return res.status(400).json({ error: 'productId is required' });
+      }
+      
+      // Validate product exists
       const product = await Product.findById(productId);
       if (!product) {
         return res.status(404).json({ error: 'Product not found' });
-      }
-      
-      // Verify product has colorVariants
-      if (!product.colorVariants || product.colorVariants.length === 0) {
-        return res.status(400).json({ error: 'Product has incomplete data (missing color variants)' });
       }
       
       const cartItemIndex = user.cart.findIndex(item => 
@@ -177,10 +196,14 @@ const userController = {
       );
 
       if (cartItemIndex > -1) {
-        user.cart[cartItemIndex].quantity += quantity;
+        const currentQty = Number(user.cart[cartItemIndex].quantity) || 0;
+        user.cart[cartItemIndex].quantity = currentQty + quantity;
       } else {
         user.cart.push({ product: productId, quantity });
       }
+
+      // Normalize all quantities to ensure no NaN slips through
+      normalizeCartQuantities(user);
 
       await user.save();
       res.json(user.cart);
@@ -200,6 +223,10 @@ const userController = {
       user.cart = user.cart.filter(item => 
         item.product.toString() !== productId
       );
+
+      // Normalize before save, just in case
+      normalizeCartQuantities(user);
+
       await user.save();
       
       // 2. Also remove from Cart model
@@ -230,13 +257,14 @@ const userController = {
   // Update cart item quantity
   async updateCartItemQuantity(req, res) {
     try {
-      const { quantity } = req.body;
+      const quantityRaw = req.body.quantity;
+      const quantity = Number(quantityRaw);
       const productId = req.params.productId;
       const user = req.user;
       
       // Validate quantity
-      if (!quantity || quantity < 1) {
-        return res.status(400).json({ error: 'Quantity must be at least 1' });
+      if (!Number.isFinite(quantity) || quantity < 1) {
+        return res.status(400).json({ error: 'Quantity must be a number and at least 1' });
       }
       
       // Find the cart item
@@ -249,7 +277,11 @@ const userController = {
       }
       
       // Update the quantity
-      user.cart[cartItemIndex].quantity = quantity;
+      user.cart[cartItemIndex].quantity = Math.floor(quantity);
+
+      // Normalize before save to sanitize others
+      normalizeCartQuantities(user);
+
       await user.save();
       
       // Return the updated cart
@@ -356,6 +388,9 @@ const userController = {
         return res.status(404).json({ error: 'User not found' });
       }
       
+      // Normalize embedded cart quantities before formatting
+      normalizeCartQuantities(user);
+
       // Format cart items to include necessary details
       const formattedCart = user.cart.filter(item => item.product != null).map(item => {
         const product = item.product;

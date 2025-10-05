@@ -1,6 +1,10 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 
+// Safe defaults to prevent 500 errors when environment is missing
+const JWT_SECRET = process.env.JWT_SECRET || 'change_this_dev_secret';
+const JWT_EXPIRE = process.env.JWT_EXPIRE || '7d';
+
 const authController = {
   register: async (req, res) => {
     try {
@@ -24,8 +28,8 @@ const authController = {
       // Create JWT token
       const token = jwt.sign(
         { userId: user._id },
-        process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRE }
+        JWT_SECRET,
+        { expiresIn: JWT_EXPIRE }
       );
 
       res.status(201).json({ 
@@ -40,6 +44,7 @@ const authController = {
         }
       });
     } catch (error) {
+      console.error('Register error:', error);
       res.status(500).json({ message: 'Server error' });
     }
   },
@@ -55,7 +60,14 @@ const authController = {
       }
 
       // Verify password
-      const isMatch = await user.comparePassword(password);
+      let isMatch = false;
+      try {
+        isMatch = await user.comparePassword(password);
+      } catch (err) {
+        console.error('Password compare error:', err);
+        return res.status(400).json({ message: 'Invalid credentials' });
+      }
+
       if (!isMatch) {
         return res.status(400).json({ message: 'Invalid credentials' });
       }
@@ -63,9 +75,13 @@ const authController = {
       // Create JWT token
       const token = jwt.sign(
         { userId: user._id },
-        process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRE }
+        JWT_SECRET,
+        { expiresIn: JWT_EXPIRE }
       );
+
+      // Update last login (non-blocking)
+      user.lastLogin = new Date();
+      user.save().catch(() => {});
 
       // Send success response with user data and token
       res.json({
@@ -80,6 +96,7 @@ const authController = {
         }
       });
     } catch (error) {
+      console.error('Login error:', error);
       res.status(500).json({ message: 'Server error' });
     }
   }

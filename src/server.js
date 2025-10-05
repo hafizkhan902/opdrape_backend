@@ -14,6 +14,7 @@ const adminRoutes = require('./routes/adminRoutes');
 const productRoutes = require('./routes/productRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const cartRoutes = require('./routes/cartRoutes');
+const aiRoutes = require('./routes/aiRoutes');
 
 const app = express();
 
@@ -35,7 +36,7 @@ app.use(cors({
     return callback(null, true);
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-requested-with'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-requested-with', 'x-auth-token', 'x-access-token'],
   credentials: true,
   maxAge: 86400 // 24 hours
 }));
@@ -55,7 +56,8 @@ app.get('/', (req, res) => {
       users: '/api/users',
       admin: '/api/admin',
       products: '/api/products',
-      orders: '/api/orders'
+      orders: '/api/orders',
+      ai: '/api/ai'
     },
     documentation: 'API documentation available at /api-docs',
     environment: process.env.NODE_ENV || 'development'
@@ -77,6 +79,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/cart', cartRoutes);
+app.use('/api/ai', aiRoutes);
 
 // 404 handler - for undefined routes
 app.use((req, res) => {

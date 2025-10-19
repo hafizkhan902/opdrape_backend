@@ -15,6 +15,14 @@ const orderRoutes = require('./routes/orderRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
 const aiRoutes = require('./routes/aiRoutes');
 
+// Import and verify Cloudinary configuration
+const { verifyConnection } = require('./config/cloudinary');
+
+// Verify Cloudinary connection on startup
+verifyConnection().catch(err => {
+  console.error('⚠️  Warning: Cloudinary connection could not be verified');
+});
+
 // Request logger (must be first)
 app.use(requestLogger);
 
@@ -63,8 +71,8 @@ app.use(cors({
   maxAge: 86400 // 24 hours
 }));
 
-// Serve static files from uploads directory
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Note: Static file serving for uploads removed - now using Cloudinary cloud storage
+// Images are served directly from Cloudinary CDN
 
 // Routes
 app.use('/api/admin', adminRoutes);

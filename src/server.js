@@ -14,7 +14,11 @@ const adminRoutes = require('./routes/adminRoutes');
 const productRoutes = require('./routes/productRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const cartRoutes = require('./routes/cartRoutes');
+const uploadRoutes = require('./routes/uploadRoutes');
 const aiRoutes = require('./routes/aiRoutes');
+
+// Import and verify Cloudinary configuration
+const { verifyConnection } = require('./config/cloudinary');
 
 const app = express();
 
@@ -45,6 +49,11 @@ app.use(helmet());
 // Add this before your routes
 app.use(requestLogger);
 
+// Verify Cloudinary connection on startup
+verifyConnection().catch(err => {
+  console.error('⚠️  Warning: Cloudinary connection could not be verified');
+});
+
 // Root path handler
 app.get('/', (req, res) => {
   res.json({
@@ -57,6 +66,8 @@ app.get('/', (req, res) => {
       admin: '/api/admin',
       products: '/api/products',
       orders: '/api/orders',
+      cart: '/api/cart',
+      uploads: '/api/uploads',
       ai: '/api/ai'
     },
     documentation: 'API documentation available at /api-docs',
@@ -79,6 +90,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/cart', cartRoutes);
+app.use('/api/uploads', uploadRoutes);
 app.use('/api/ai', aiRoutes);
 
 // 404 handler - for undefined routes

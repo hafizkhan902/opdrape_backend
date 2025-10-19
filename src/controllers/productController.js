@@ -67,10 +67,8 @@ const productController = {
             return res.status(400).json({ error: `Images for color variant "${variant.color.name}" must have URL` });
           }
           
-          // Ensure URLs are properly formatted
-          if (!image.url.startsWith('/uploads/') && !image.url.startsWith('http')) {
-            image.url = `/uploads/products/${image.url}`;
-          }
+          // Accept Cloudinary URLs (https://res.cloudinary.com/...) or other http URLs
+          // No need to transform URLs anymore as they come directly from Cloudinary
         }
         
         // Ensure sizes are valid

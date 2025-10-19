@@ -4,7 +4,7 @@ const adminController = require('../controllers/adminController');
 const auth = require('../middleware/auth');
 const adminAuth = require('../middleware/adminAuth');
 const adminActivityLogger = require('../middleware/adminActivityLogger');
-const upload = require('../middleware/upload');
+const upload = require('../middleware/uploadMiddleware');
 
 // All routes require authentication and admin role
 router.use(auth, adminAuth);

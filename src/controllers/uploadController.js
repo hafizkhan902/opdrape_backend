@@ -1,39 +1,51 @@
-const path = require('path');
-const fs = require('fs');
+const { uploadToCloudinary, deleteFromCloudinary, extractPublicId } = require('../config/cloudinary');
 
 const uploadController = {
-  // Upload a single file
+  // Upload a single file to Cloudinary
   uploadFile: async (req, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ error: 'No file uploaded' });
       }
 
-      // Get file information
       const file = req.file;
       const type = req.params.type || 'products';
       
-      // Create file URL for response
-      const fileUrl = `/uploads/${type}/${file.filename}`;
+      // Upload to Cloudinary
+      const result = await uploadToCloudinary(file.buffer, {
+        folder: `opdrape/${type}`,
+        public_id: `${Date.now()}-${Math.round(Math.random() * 1E9)}`,
+        resource_type: 'auto'
+      });
       
       // Return success response with file details
       res.status(201).json({
         message: 'File uploaded successfully',
         file: {
-          filename: file.filename,
+          filename: result.public_id,
           originalname: file.originalname,
           mimetype: file.mimetype,
           size: file.size,
-          url: fileUrl
+          url: result.secure_url,
+          publicId: result.public_id,
+          cloudinaryData: {
+            asset_id: result.asset_id,
+            width: result.width,
+            height: result.height,
+            format: result.format
+          }
         }
       });
     } catch (error) {
-      console.error('Error uploading file:', error);
-      res.status(500).json({ error: error.message });
+      console.error('Error uploading file to Cloudinary:', error);
+      res.status(500).json({ 
+        error: 'Failed to upload file',
+        details: error.message 
+      });
     }
   },
 
-  // Upload multiple files
+  // Upload multiple files to Cloudinary
   uploadMultipleFiles: async (req, res) => {
     try {
       if (!req.files || req.files.length === 0) {
@@ -42,16 +54,29 @@ const uploadController = {
 
       const type = req.params.type || 'products';
       
-      // Process all uploaded files
-      const uploadedFiles = req.files.map(file => {
-        return {
-          filename: file.filename,
+      // Upload all files to Cloudinary
+      const uploadPromises = req.files.map(file => 
+        uploadToCloudinary(file.buffer, {
+          folder: `opdrape/${type}`,
+          public_id: `${Date.now()}-${Math.round(Math.random() * 1E9)}`,
+          resource_type: 'auto'
+        }).then(result => ({
+          filename: result.public_id,
           originalname: file.originalname,
           mimetype: file.mimetype,
           size: file.size,
-          url: `/uploads/${type}/${file.filename}`
-        };
-      });
+          url: result.secure_url,
+          publicId: result.public_id,
+          cloudinaryData: {
+            asset_id: result.asset_id,
+            width: result.width,
+            height: result.height,
+            format: result.format
+          }
+        }))
+      );
+
+      const uploadedFiles = await Promise.all(uploadPromises);
 
       // Return success response with file details
       res.status(201).json({
@@ -60,32 +85,49 @@ const uploadController = {
         files: uploadedFiles
       });
     } catch (error) {
-      console.error('Error uploading multiple files:', error);
-      res.status(500).json({ error: error.message });
+      console.error('Error uploading multiple files to Cloudinary:', error);
+      res.status(500).json({ 
+        error: 'Failed to upload files',
+        details: error.message 
+      });
     }
   },
   
-  // Get uploaded files
+  // Delete file from Cloudinary
+  deleteFile: async (req, res) => {
+    try {
+      const { publicId } = req.body;
+      
+      if (!publicId) {
+        return res.status(400).json({ error: 'Public ID is required' });
+      }
+
+      const result = await deleteFromCloudinary(publicId);
+      
+      res.json({
+        message: 'File deleted successfully',
+        result
+      });
+    } catch (error) {
+      console.error('Error deleting file from Cloudinary:', error);
+      res.status(500).json({ 
+        error: 'Failed to delete file',
+        details: error.message 
+      });
+    }
+  },
+  
+  // Get uploaded files (Note: This would need Cloudinary Admin API to list resources)
   getUploadedFiles: async (req, res) => {
     try {
       const type = req.params.type || 'products';
-      const dirPath = path.join(__dirname, '../../uploads', type);
       
-      if (!fs.existsSync(dirPath)) {
-        return res.status(404).json({ error: 'Directory not found' });
-      }
-      
-      const files = fs.readdirSync(dirPath);
-      const fileData = files.map(filename => {
-        return {
-          filename,
-          url: `/uploads/${type}/${filename}`
-        };
-      });
-      
+      // This would require using Cloudinary Admin API to list resources
+      // For now, return a message indicating this feature needs Cloudinary Admin API
       res.json({
-        count: fileData.length,
-        files: fileData
+        message: 'Files are now stored in Cloudinary cloud storage',
+        folder: `opdrape/${type}`,
+        note: 'Use Cloudinary dashboard to view all uploaded files'
       });
     } catch (error) {
       console.error('Error getting uploaded files:', error);

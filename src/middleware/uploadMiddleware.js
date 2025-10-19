@@ -1,34 +1,8 @@
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 
-// Create uploads directory if it doesn't exist
-const uploadDir = path.join(__dirname, '../../uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-// Define storage settings
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    // Store in different folders based on upload type
-    const type = req.params.type || 'products';
-    const typeDir = path.join(uploadDir, type);
-    
-    // Create type directory if it doesn't exist
-    if (!fs.existsSync(typeDir)) {
-      fs.mkdirSync(typeDir, { recursive: true });
-    }
-    
-    cb(null, typeDir);
-  },
-  filename: function (req, file, cb) {
-    // Create unique filename with original extension
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, uniqueSuffix + ext);
-  }
-});
+// Use memory storage to keep files in memory as Buffer objects
+// This allows us to upload directly to Cloudinary without saving to disk
+const storage = multer.memoryStorage();
 
 // File filter to allow only images
 const fileFilter = (req, file, cb) => {
@@ -40,7 +14,7 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// Create multer upload instance
+// Create multer upload instance with memory storage
 const upload = multer({
   storage: storage,
   fileFilter: fileFilter,

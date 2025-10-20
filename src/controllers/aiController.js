@@ -35,19 +35,19 @@ const getRelevantData = async (message, userId) => {
     data.bestSellers = await Product.find({ 
       isActive: true, 
       'metadata.isBestSeller': true 
-    }).select('name description basePrice salePrice category subCategory averageRating totalReviews').limit(5);
+    }).select('name description basePrice salePrice category subCategory averageRating totalReviews colorVariants metadata').limit(5);
 
     // Get new arrivals
     data.newArrivals = await Product.find({ 
       isActive: true, 
       'metadata.isNewArrival': true 
-    }).select('name description basePrice salePrice category subCategory').limit(5);
+    }).select('name description basePrice salePrice category subCategory averageRating totalReviews colorVariants metadata').limit(5);
 
     // Get sale items
     data.saleItems = await Product.find({ 
       isActive: true, 
       'metadata.isSale': true 
-    }).select('name description basePrice salePrice category subCategory metadata.salePercentage').limit(5);
+    }).select('name description basePrice salePrice category subCategory averageRating totalReviews colorVariants metadata').limit(5);
 
     // Get user's recent orders if userId is provided
     if (userId) {
@@ -204,6 +204,52 @@ const formatDataForAI = (data) => {
 };
 
 const aiController = {
+  // Build a compact product card payload for chat UI
+  buildProductCard: (product) => {
+    if (!product) return null;
+
+    const price = product.salePrice || product.basePrice;
+    const primaryVariant = Array.isArray(product.colorVariants) && product.colorVariants.length > 0 ? product.colorVariants[0] : null;
+    const primaryImage = primaryVariant && Array.isArray(primaryVariant.images) && primaryVariant.images.length > 0 ? primaryVariant.images[0] : null;
+
+    // Prefer images from the primary variant; fall back to any variant images
+    const variantImages = Array.isArray(primaryVariant && primaryVariant.images) ? primaryVariant.images : [];
+    const allVariantImages = (product.colorVariants || [])
+      .flatMap(cv => Array.isArray(cv.images) ? cv.images : []);
+    const images = (variantImages.length > 0 ? variantImages : allVariantImages).slice(0, 8);
+
+    const colors = (product.colorVariants || [])
+      .map(cv => cv && cv.color && cv.color.name)
+      .filter(Boolean)
+      .slice(0, 8);
+
+    const sizes = (primaryVariant && Array.isArray(primaryVariant.sizes) ? primaryVariant.sizes.map(s => s && s.name).filter(Boolean) : [])
+      .slice(0, 8);
+
+    return {
+      id: String(product._id),
+      name: product.name,
+      description: product.description,
+      category: product.category,
+      subCategory: product.subCategory,
+      price,
+      basePrice: product.basePrice,
+      salePrice: product.salePrice || null,
+      averageRating: product.averageRating || 0,
+      totalReviews: product.totalReviews || 0,
+      primaryImage: primaryImage ? {
+        url: primaryImage.url,
+        alt: primaryImage.alt || product.name
+      } : null,
+      images: images.map(img => ({ url: img.url, alt: img.alt || product.name })),
+      colors,
+      sizes,
+      isBestSeller: !!(product.metadata && product.metadata.isBestSeller),
+      isNewArrival: !!(product.metadata && product.metadata.isNewArrival),
+      isSale: !!(product.metadata && product.metadata.isSale),
+    };
+  },
+
   // Send a message to AI and get response
   sendMessage: async (req, res) => {
     try {
@@ -261,12 +307,29 @@ const aiController = {
       // Log the interaction (optional - for analytics)
       console.log(`AI Chat - User: ${userId}, Message: ${message.substring(0, 100)}...`);
 
+      // Build compact product cards (if any were found) for frontend chat UI
+      let productCards = Array.isArray(relevantData.products)
+        ? relevantData.products.map(p => aiController.buildProductCard(p)).filter(Boolean)
+        : [];
+
+      // Fallback: if no product cards matched the message, serve best sellers or new arrivals
+      if (!productCards || productCards.length === 0) {
+        const fallbackList = (Array.isArray(relevantData.bestSellers) && relevantData.bestSellers.length > 0)
+          ? relevantData.bestSellers
+          : (Array.isArray(relevantData.newArrivals) ? relevantData.newArrivals : []);
+        productCards = fallbackList.map(p => aiController.buildProductCard(p)).filter(Boolean).slice(0, 6);
+      }
+
       res.json({
         success: true,
         data: {
           message: aiResponse,
           timestamp: new Date().toISOString(),
           conversationId: `conv_${userId}_${Date.now()}`,
+          // Compatibility fields expected by frontend
+          productCards,
+          cards: productCards,
+          products: productCards,
           dataUsed: {
             productsFound: relevantData.products.length,
             categoriesFound: relevantData.categories.length,
@@ -298,6 +361,59 @@ const aiController = {
         success: false,
         message: 'Failed to process your message. Please try again.'
       });
+    }
+  },
+
+  // Search products and return product cards for chat UI
+  searchProductCards: async (req, res) => {
+    try {
+      const { q = '', category, subCategory, limit = 6 } = req.query;
+      const max = Math.min(parseInt(limit, 10) || 6, 20);
+
+      const filters = { isActive: true };
+      if (q && q.trim().length > 0) {
+        const keywords = q.toLowerCase().split(/\s+/).filter(w => w.length > 1);
+        if (keywords.length > 0) {
+          filters.$or = [
+            { name: { $regex: keywords.join('|'), $options: 'i' } },
+            { description: { $regex: keywords.join('|'), $options: 'i' } },
+            { category: { $regex: keywords.join('|'), $options: 'i' } },
+            { subCategory: { $regex: keywords.join('|'), $options: 'i' } },
+            { tags: { $in: keywords } }
+          ];
+        }
+      }
+      if (category) filters.category = { $regex: `^${category}$`, $options: 'i' };
+      if (subCategory) filters.subCategory = { $regex: `^${subCategory}$`, $options: 'i' };
+
+      const products = await Product.find(filters)
+        .select('name description basePrice salePrice category subCategory averageRating totalReviews colorVariants metadata')
+        .limit(max);
+
+      const cards = products.map(p => aiController.buildProductCard(p)).filter(Boolean);
+
+      res.json({ success: true, data: { count: cards.length, cards } });
+    } catch (error) {
+      console.error('AI searchProductCards error:', error);
+      res.status(500).json({ success: false, message: 'Failed to search product cards' });
+    }
+  },
+
+  // Get a single product card by id
+  getProductCardById: async (req, res) => {
+    try {
+      const { id } = req.params;
+      if (!id) return res.status(400).json({ success: false, message: 'Product id is required' });
+
+      const product = await Product.findOne({ _id: id, isActive: true })
+        .select('name description basePrice salePrice category subCategory averageRating totalReviews colorVariants metadata');
+      if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+
+      const card = aiController.buildProductCard(product);
+      res.json({ success: true, data: { card } });
+    } catch (error) {
+      console.error('AI getProductCardById error:', error);
+      res.status(500).json({ success: false, message: 'Failed to get product card' });
     }
   },
 

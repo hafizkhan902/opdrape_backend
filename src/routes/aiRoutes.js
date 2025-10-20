@@ -38,4 +38,19 @@ router.get('/suggestions', auth, aiController.getSuggestions);
  */
 router.get('/health', auth, aiController.healthCheck);
 
+/**
+ * @route   GET /api/ai/products/search
+ * @desc    Search products and return compact product cards for chat UI
+ * @query   q (string), category (string), subCategory (string), limit (number)
+ * @access  Private
+ */
+router.get('/products/search', auth, aiController.searchProductCards);
+
+/**
+ * @route   GET /api/ai/products/:id
+ * @desc    Get a single product card by id for chat UI
+ * @access  Private
+ */
+router.get('/products/:id', auth, aiController.getProductCardById);
+
 module.exports = router;

@@ -307,17 +307,71 @@ const aiController = {
       // Log the interaction (optional - for analytics)
       console.log(`AI Chat - User: ${userId}, Message: ${message.substring(0, 100)}...`);
 
-      // Build compact product cards (if any were found) for frontend chat UI
-      let productCards = Array.isArray(relevantData.products)
-        ? relevantData.products.map(p => aiController.buildProductCard(p)).filter(Boolean)
-        : [];
+      // Use AI to determine if product cards should be shown
+      let productCards = [];
+      let shouldShowProducts = false;
+      
+      try {
+        // Create a specialized prompt to determine if products should be shown
+        const productDecisionPrompt = `Analyze this user message and determine if they want to see product information or product cards.
 
-      // Fallback: if no product cards matched the message, serve best sellers or new arrivals
-      if (!productCards || productCards.length === 0) {
-        const fallbackList = (Array.isArray(relevantData.bestSellers) && relevantData.bestSellers.length > 0)
-          ? relevantData.bestSellers
-          : (Array.isArray(relevantData.newArrivals) ? relevantData.newArrivals : []);
-        productCards = fallbackList.map(p => aiController.buildProductCard(p)).filter(Boolean).slice(0, 6);
+User message: "${message}"
+
+Context: This is an e-commerce store selling clothing (men, women, kids) and accessories.
+
+Rules:
+- Return "YES" if the user is asking about products, wants to see products, wants recommendations, or is shopping
+- Return "NO" if the user is asking about policies, support, orders, account, or general questions
+
+Examples:
+- "Show me shirts" → YES
+- "What products do you have?" → YES  
+- "I need a dress" → YES
+- "What's your return policy?" → NO
+- "How do I track my order?" → NO
+- "Hello" → NO
+- "Contact support" → NO
+
+Respond with only "YES" or "NO":`;
+
+        const decisionModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        const decisionResult = await decisionModel.generateContent(productDecisionPrompt);
+        const decisionResponse = await decisionResult.response;
+        const decision = decisionResponse.text().trim().toUpperCase();
+        
+        shouldShowProducts = decision === "YES";
+        
+        console.log(`AI Product Decision: "${message}" → ${decision} (${shouldShowProducts ? 'SHOW PRODUCTS' : 'NO PRODUCTS'})`);
+        
+      } catch (error) {
+        console.error('Error in AI product decision:', error);
+        // Fallback to keyword matching if AI decision fails
+        const productKeywords = [
+          'product', 'products', 'item', 'items', 'buy', 'purchase', 'shirt', 'dress', 'pants', 'shoes',
+          'show me', 'find', 'search', 'looking for', 'need', 'want', 'recommend', 'suggest',
+          'price', 'cost', 'expensive', 'cheap', 'sale', 'discount', 'new', 'latest', 'best',
+          'category', 'categories', 'men', 'women', 'kids', 'accessories', 'brand', 'size', 'color'
+        ];
+        
+        const messageLower = message.toLowerCase();
+        shouldShowProducts = productKeywords.some(keyword => messageLower.includes(keyword)) ||
+                           relevantData.products.length > 0 ||
+                           messageLower.includes('what') && (messageLower.includes('have') || messageLower.includes('sell'));
+      }
+      
+      // Only return product cards if AI determined the message is product-related
+      if (shouldShowProducts) {
+        productCards = Array.isArray(relevantData.products)
+          ? relevantData.products.map(p => aiController.buildProductCard(p)).filter(Boolean)
+          : [];
+
+        // Fallback: if no product cards matched the message, serve best sellers or new arrivals
+        if (!productCards || productCards.length === 0) {
+          const fallbackList = (Array.isArray(relevantData.bestSellers) && relevantData.bestSellers.length > 0)
+            ? relevantData.bestSellers
+            : (Array.isArray(relevantData.newArrivals) ? relevantData.newArrivals : []);
+          productCards = fallbackList.map(p => aiController.buildProductCard(p)).filter(Boolean).slice(0, 6);
+        }
       }
 
       res.json({

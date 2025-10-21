@@ -139,6 +139,57 @@ const userController = {
     }
   },
 
+  // Get wishlist
+  async getWishlist(req, res) {
+    try {
+      const user = await User.findById(req.user._id)
+        .populate('wishlist', 'name description basePrice salePrice category subCategory averageRating totalReviews colorVariants metadata')
+        .select('wishlist');
+      
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      // Transform wishlist products to match frontend expectations
+      const wishlistProducts = user.wishlist.map(product => ({
+        id: product._id,
+        name: product.name,
+        description: product.description,
+        category: product.category,
+        subCategory: product.subCategory,
+        price: product.salePrice || product.basePrice,
+        basePrice: product.basePrice,
+        salePrice: product.salePrice,
+        averageRating: product.averageRating || 0,
+        totalReviews: product.totalReviews || 0,
+        primaryImage: product.colorVariants && product.colorVariants.length > 0 && product.colorVariants[0].images && product.colorVariants[0].images.length > 0 
+          ? {
+              url: product.colorVariants[0].images[0].url,
+              alt: product.colorVariants[0].images[0].alt || product.name
+            }
+          : null,
+        images: product.colorVariants ? product.colorVariants.flatMap(cv => cv.images || []).slice(0, 8) : [],
+        colors: product.colorVariants ? product.colorVariants.map(cv => cv.color?.name).filter(Boolean) : [],
+        sizes: product.colorVariants && product.colorVariants[0] ? product.colorVariants[0].sizes?.map(s => s.name).filter(Boolean) : [],
+        isBestSeller: !!(product.metadata && product.metadata.isBestSeller),
+        isNewArrival: !!(product.metadata && product.metadata.isNewArrival),
+        isSale: !!(product.metadata && product.metadata.isSale),
+        addedAt: new Date() // You might want to track when items were added
+      }));
+
+      res.json({
+        success: true,
+        data: {
+          wishlist: wishlistProducts,
+          count: wishlistProducts.length
+        }
+      });
+    } catch (error) {
+      console.error('Get wishlist error:', error);
+      res.status(500).json({ error: 'Failed to get wishlist' });
+    }
+  },
+
   // Add to wishlist
   async addToWishlist(req, res) {
     try {

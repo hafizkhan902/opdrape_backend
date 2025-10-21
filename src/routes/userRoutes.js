@@ -15,6 +15,7 @@ router.post('/change-password', auth, userController.changePassword);
 router.get('/orders', auth, userController.getOrders);
 
 // Wishlist routes
+router.get('/wishlist', auth, userController.getWishlist);
 router.post('/wishlist/:productId', auth, userController.addToWishlist);
 router.delete('/wishlist/:productId', auth, userController.removeFromWishlist);
 

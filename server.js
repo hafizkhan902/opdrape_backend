@@ -22,7 +22,7 @@ app.use(cors({
     const allowedOrigins = [
       'https://opdrape.store',
       'https://www.opdrape.store',
-      'https://inspiring-duckanoo-173e0d.netlify.app'
+      'https://candid-otter-d31130.netlify.app'
     ];
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
